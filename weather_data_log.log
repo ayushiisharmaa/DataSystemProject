@@ -1,0 +1,23 @@
+2025-04-13 17:16:42,854 - INFO - Starting weather data automation script
+2025-04-13 17:16:42,854 - INFO - Starting weather data extraction
+2025-04-13 17:16:46,267 - INFO - Navigated to http://deltaweather.extension.msstate.edu/weather-station-result/DREC-2014
+2025-04-13 17:16:56,426 - ERROR - Error in extract_weather_data: Message: 
+Stacktrace:
+0   chromedriver                        0x0000000102546dec cxxbridge1$str$ptr + 2817040
+1   chromedriver                        0x000000010253f088 cxxbridge1$str$ptr + 2784940
+2   chromedriver                        0x00000001020868d8 cxxbridge1$string$len + 93028
+3   chromedriver                        0x00000001020cd6a0 cxxbridge1$string$len + 383276
+4   chromedriver                        0x000000010210e7b8 cxxbridge1$string$len + 649796
+5   chromedriver                        0x00000001020c1a80 cxxbridge1$string$len + 335116
+6   chromedriver                        0x000000010250bc74 cxxbridge1$str$ptr + 2575000
+7   chromedriver                        0x000000010250ef40 cxxbridge1$str$ptr + 2588004
+8   chromedriver                        0x00000001024eb9fc cxxbridge1$str$ptr + 2443296
+9   chromedriver                        0x000000010250f7bc cxxbridge1$str$ptr + 2590176
+10  chromedriver                        0x00000001024dcaf0 cxxbridge1$str$ptr + 2382100
+11  chromedriver                        0x000000010252f9a0 cxxbridge1$str$ptr + 2721732
+12  chromedriver                        0x000000010252fb2c cxxbridge1$str$ptr + 2722128
+13  chromedriver                        0x000000010253ecd4 cxxbridge1$str$ptr + 2783992
+14  libsystem_pthread.dylib             0x000000019e1a2f94 _pthread_start + 136
+15  libsystem_pthread.dylib             0x000000019e19dd34 thread_start + 8
+
+2025-04-13 17:16:56,497 - INFO - Scheduled daily job at 07:00

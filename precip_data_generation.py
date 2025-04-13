@@ -4,199 +4,185 @@ import pandas as pd
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-import schedule
+# import schedule
 import logging
 
 # Set up logging
 logging.basicConfig(
-    filename='weather_data_scraper.log',
+    filename='weather_data_log.log',
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-def setup_driver():
-    """Set up and return a Chrome webdriver with appropriate options."""
-    try:
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")  # Run in background
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_experimental_option("prefs", {
-            "download.default_directory": os.path.abspath("downloads"),
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": False
-        })
-        
-        # Create downloads directory if it doesn't exist
-        os.makedirs("downloads", exist_ok=True)
-        
-        # Initialize the Chrome driver
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=chrome_options
-        )
-        return driver
-    except Exception as e:
-        logging.error(f"Failed to set up driver: {e}")
-        raise
+# Path to save downloaded data and master Excel file
+DOWNLOAD_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
+MASTER_EXCEL_FILE = os.path.join(os.path.expanduser("~"), "Documents", "precipitation_data.xlsx")
 
-def navigate_and_download_data():
-    """Navigate to the website, select options, and download data."""
+def setup_driver():
+    """Set up and return a Chrome WebDriver with appropriate options."""
+    chrome_options = Options()
+    chrome_options.add_experimental_option("prefs", {
+        "download.default_directory": DOWNLOAD_DIR,
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True
+    })
+    # Uncomment the line below if you want the browser to run headlessly (no UI)
+    # chrome_options.add_argument("--headless")
+    
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
+
+def extract_weather_data():
+    """Main function to navigate to the website, extract data, and update the Excel file."""
+    logging.info("Starting weather data extraction")
+    
     try:
         driver = setup_driver()
         
-        # Navigate to the website
+        # Step 1: Navigate to the weather station webpage
         url = "http://deltaweather.extension.msstate.edu/weather-station-result/DREC-2014"
         driver.get(url)
-        logging.info(f"Successfully navigated to {url}")
+        logging.info(f"Navigated to {url}")
         
-        # Wait for page to load
-        WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "hourly-tab"))
+        # Step 2: Select options
+        # Wait for the page to load
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "time_period"))
         )
         
-        # Click on "Hourly" tab
-        hourly_tab = driver.find_element(By.ID, "hourly-tab")
-        hourly_tab.click()
-        logging.info("Clicked on Hourly tab")
+        # Select "Hourly"
+        time_period_select = Select(driver.find_element(By.ID, "time_period"))
+        time_period_select.select_by_visible_text("Hourly")
+        logging.info("Selected 'Hourly' from time period dropdown")
         
-        # Wait for hourly form to load
+        # Wait for duration dropdown to be clickable
         WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "formHourly"))
+            EC.element_to_be_clickable((By.ID, "duration"))
         )
         
         # Select "Last 24 Hours"
-        time_select = Select(driver.find_element(By.ID, "hourlyTimePeriod"))
-        time_select.select_by_visible_text("Last 24 Hours")
-        logging.info("Selected 'Last 24 Hours'")
+        duration_select = Select(driver.find_element(By.ID, "duration"))
+        duration_select.select_by_visible_text("Last 24 Hours")
+        logging.info("Selected 'Last 24 Hours' from duration dropdown")
         
-        # Wait for the form to update
-        time.sleep(2)
+        # Wait for parameters checkboxes to be clickable
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, "parameter_check"))
+        )
         
-        # Clear all checkboxes first
-        checkboxes = driver.find_elements(By.CSS_SELECTOR, "#formHourly input[type='checkbox']")
+        # Uncheck all parameters first
+        checkboxes = driver.find_elements(By.CLASS_NAME, "parameter_check")
         for checkbox in checkboxes:
             if checkbox.is_selected():
                 checkbox.click()
         
-        # Select required fields: Record Date, Record Time, and Precipitation
-        field_ids = ["Record_Date", "Record_Time", "Precipitation"]
-        for field_id in field_ids:
-            try:
-                checkbox = driver.find_element(By.ID, field_id)
+        # Find and check specific parameters
+        params_to_select = ["Record Date", "Record Time", "Precipitation"]
+        for param in params_to_select:
+            # Find the label containing the parameter text
+            param_labels = driver.find_elements(By.XPATH, f"//label[contains(text(), '{param}')]")
+            for label in param_labels:
+                # Get the associated checkbox
+                checkbox_id = label.get_attribute("for")
+                checkbox = driver.find_element(By.ID, checkbox_id)
                 if not checkbox.is_selected():
                     checkbox.click()
-                logging.info(f"Selected {field_id} checkbox")
-            except Exception as e:
-                logging.warning(f"Could not find or select {field_id} checkbox: {e}")
+                    logging.info(f"Selected parameter: {param}")
         
-        # Click Export Data button
-        export_button = driver.find_element(By.ID, "exportDataHourly")
+        # Step 3: Click "Export Data"
+        export_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Export Data')]"))
+        )
         export_button.click()
-        logging.info("Clicked Export Data button")
+        logging.info("Clicked 'Export Data' button")
         
-        # Wait for the download to complete (assuming a small file)
-        time.sleep(5)
+        # Wait for download to complete
+        time.sleep(5)  # Adjust time as needed
         
-        # Close the driver
+        # Step 4: Process the downloaded file
+        process_downloaded_file()
+        
         driver.quit()
-        logging.info("Chrome driver closed")
+        logging.info("Browser session closed")
         
-        # Return the timestamp to help identify the downloaded file
-        return datetime.now().strftime("%Y%m%d_%H%M%S")
     except Exception as e:
-        logging.error(f"Error during navigation and download: {e}")
+        logging.error(f"Error in extract_weather_data: {str(e)}")
         if 'driver' in locals():
             driver.quit()
-        raise
 
-def find_latest_download():
-    """Find the most recently downloaded file in the downloads directory."""
+def process_downloaded_file():
+    """Process the downloaded CSV file and update the master Excel file."""
     try:
-        download_dir = os.path.abspath("downloads")
-        files = [os.path.join(download_dir, f) for f in os.listdir(download_dir) if os.path.isfile(os.path.join(download_dir, f))]
+        # Find the most recently downloaded file in the download directory
+        files = [os.path.join(DOWNLOAD_DIR, f) for f in os.listdir(DOWNLOAD_DIR) if f.endswith('.csv')]
         if not files:
-            logging.error("No files found in downloads directory")
-            return None
+            logging.error("No CSV files found in download directory")
+            return
         
         latest_file = max(files, key=os.path.getctime)
-        logging.info(f"Latest downloaded file: {latest_file}")
-        return latest_file
-    except Exception as e:
-        logging.error(f"Error finding latest download: {e}")
-        return None
-
-def update_master_excel(master_file="precipitation_master.xlsx"):
-    """Update the master Excel file with the new data."""
-    try:
-        latest_file = find_latest_download()
-        if not latest_file:
-            logging.error("No download file found to process")
-            return False
+        logging.info(f"Processing downloaded file: {latest_file}")
         
         # Read the downloaded data
         new_data = pd.read_csv(latest_file)
-        logging.info(f"Successfully read downloaded data with shape {new_data.shape}")
         
-        # Check if master file exists, if not create it
-        if not os.path.exists(master_file):
-            logging.info(f"Master file {master_file} not found. Creating new file.")
-            new_data.to_excel(master_file, index=False)
-            return True
+        # Format the data as needed
+        new_data['Date'] = pd.to_datetime(new_data['Record Date'] + ' ' + new_data['Record Time'])
         
-        # Read existing master file
-        try:
-            master_data = pd.read_excel(master_file)
-            logging.info(f"Successfully read master data with shape {master_data.shape}")
-        except Exception as e:
-            logging.error(f"Failed to read master file, creating new one: {e}")
-            new_data.to_excel(master_file, index=False)
-            return True
+        # Check if master Excel file exists
+        if os.path.exists(MASTER_EXCEL_FILE):
+            # Read existing data
+            existing_data = pd.read_excel(MASTER_EXCEL_FILE)
+            
+            # Combine new data with existing data
+            combined_data = pd.concat([existing_data, new_data], ignore_index=True)
+            
+            # Remove duplicates based on date and time
+            combined_data = combined_data.drop_duplicates(subset=['Date'], keep='last').sort_values('Date')
+            
+            # Save updated data
+            combined_data.to_excel(MASTER_EXCEL_FILE, index=False)
+            logging.info(f"Updated existing file: {MASTER_EXCEL_FILE}")
+        else:
+            # Create new Excel file with the data
+            new_data.to_excel(MASTER_EXCEL_FILE, index=False)
+            logging.info(f"Created new file: {MASTER_EXCEL_FILE}")
         
-        # Combine data, avoiding duplicates
-        combined_data = pd.concat([master_data, new_data]).drop_duplicates().reset_index(drop=True)
-        logging.info(f"Combined data has shape {combined_data.shape}")
+        # Optionally, delete the downloaded file
+        # os.remove(latest_file)
+        # logging.info(f"Deleted downloaded file: {latest_file}")
         
-        # Save the updated master file
-        combined_data.to_excel(master_file, index=False)
-        logging.info(f"Successfully updated {master_file}")
-        return True
     except Exception as e:
-        logging.error(f"Error updating master Excel: {e}")
-        return False
+        logging.error(f"Error in process_downloaded_file: {str(e)}")
 
-def run_daily_task():
-    """Run the complete process of downloading and updating the data."""
-    try:
-        logging.info("Starting daily data collection task")
-        navigate_and_download_data()
-        update_master_excel()
-        logging.info("Daily task completed successfully")
-    except Exception as e:
-        logging.error(f"Failed to complete daily task: {e}")
+def daily_job():
+    """Function to run daily at 7:00 AM."""
+    logging.info("Running scheduled daily job")
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    logging.info(f"Extracting data for {current_date}")
+    extract_weather_data()
+    logging.info("Daily job completed")
 
 def main():
-    """Main function to schedule and run the data collection task."""
+    """Main function to set up scheduling and run initial data extraction."""
     logging.info("Starting weather data automation script")
     
-    # Schedule the task to run every day at 7:00 AM
-    schedule.every().day.at("07:00").do(run_daily_task)
-    logging.info("Task scheduled to run daily at 07:00")
+    # Run once immediately
+    extract_weather_data()
     
-    # Run once immediately on startup
-    run_daily_task()
+    # Schedule to run daily at 7:00 AM
+    # schedule.every().day.at("07:00").do(daily_job)
+    logging.info("Scheduled daily job at 07:00")
     
     # Keep the script running
-    while True:
+    """ while True:
         schedule.run_pending()
-        time.sleep(60)  # Check every minute
+        time.sleep(60)  # Check every minute """
 
 if __name__ == "__main__":
     main()
